@@ -162,11 +162,23 @@ public class PlayerNetwork : NetworkBehaviour
         {
             if (hitCollider.CompareTag("Orange"))
             {
-                heldOrange = hitCollider.gameObject;
-                heldOrange.transform.SetParent(transform);
-                heldOrange.transform.localPosition = new Vector3(0, 0.01f, 0); // Position in the mouth
+                RequestPickupOrangeServerRpc(hitCollider.gameObject.GetComponent<NetworkObject>().NetworkObjectId);
                 break;
             }
+        }
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void RequestPickupOrangeServerRpc(ulong orangeNetworkObjectId, ServerRpcParams rpcParams = default)
+    {
+        NetworkObject orangeNetworkObject = NetworkManager.Singleton.SpawnManager.SpawnedObjects[orangeNetworkObjectId];
+        if (orangeNetworkObject != null)
+        {
+            GameObject orange = orangeNetworkObject.gameObject;
+            orange.transform.SetParent(transform);
+            orange.transform.localPosition = new Vector3(0, 0.5f, 0);
+            heldOrange = orange;
+            orangeNetworkObject.ChangeOwnership(rpcParams.Receive.SenderClientId);
         }
     }
 
@@ -178,22 +190,54 @@ public class PlayerNetwork : NetworkBehaviour
         {
             if (hitCollider.CompareTag("Basket"))
             {
-                Destroy(heldOrange);
-                heldOrange = null;
-                AddScoreServerRpc(5);
+                RequestDropOrangeServerRpc();
                 break;
             }
         }
     }
 
-    [ServerRpc]
-    private void AddScoreServerRpc(int points)
+    [ServerRpc(RequireOwnership = false)]
+    private void RequestDropOrangeServerRpc(ServerRpcParams rpcParams = default)
+    {
+        if (heldOrange != null)
+        {
+            ulong heldOrangeNetworkObjectId = heldOrange.GetComponent<NetworkObject>().NetworkObjectId;
+            RequestDestroyOrangeServerRpc(heldOrangeNetworkObjectId, rpcParams.Receive.SenderClientId);
+            heldOrange = null;
+        }
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void RequestDestroyOrangeServerRpc(ulong orangeNetworkObjectId, ulong clientID, ServerRpcParams rpcParams = default)
+    {
+        NetworkObject orangeNetworkObject = NetworkManager.Singleton.SpawnManager.SpawnedObjects[orangeNetworkObjectId];
+        if (orangeNetworkObject != null)
+        {
+            orangeNetworkObject.Despawn();
+            AddScoreServerRpc(5, clientID);
+        }
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void AddScoreServerRpc(int points, ulong clientID)
+    {
+        if (NetworkManager.Singleton.ConnectedClients.TryGetValue(clientID, out var client))
+        {
+            PlayerNetwork playerNetwork = client.PlayerObject.GetComponent<PlayerNetwork>();
+            if (playerNetwork != null)
+            {
+                playerNetwork.UpdateScore(points, clientID);
+            }
+        }
+    }
+
+    public void UpdateScore(int points, ulong clientID)
     {
         individualScore.Value += points;
         if (individualScore.Value > highestScore.Value)
         {
             highestScore.Value = individualScore.Value;
-            highestScoreClientId.Value = clientId.Value;
+            highestScoreClientId.Value = clientID;
         }
 
         UpdateScoreTextsClientRpc(individualScore.Value, highestScore.Value, highestScoreClientId.Value);
@@ -253,16 +297,12 @@ public class PlayerNetwork : NetworkBehaviour
     {
         if (collision.CompareTag("Orange") && heldOrange == null)
         {
-            heldOrange = collision.gameObject;
-            heldOrange.transform.SetParent(transform);
-            heldOrange.transform.localPosition = new Vector3(0, 0.01f, 0); // Adjust this position to fit the player
+            RequestPickupOrangeServerRpc(collision.gameObject.GetComponent<NetworkObject>().NetworkObjectId);
         }
 
         if (collision.CompareTag("Basket") && heldOrange != null)
         {
-            Destroy(heldOrange);
-            heldOrange = null;
-            AddScoreServerRpc(5);
+            RequestDropOrangeServerRpc();
         }
     }
 }
