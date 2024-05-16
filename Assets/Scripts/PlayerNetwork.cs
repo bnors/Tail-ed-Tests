@@ -11,29 +11,43 @@ public class PlayerNetwork : NetworkBehaviour
     private float moveSpeed = 3f;
     private Animator animator;
     private SpriteRenderer spriteRenderer;
+    private GameObject heldOrange;
 
-    // Network variables for running state, move direction, and client ID
+    // Network variables for running state, move direction, client ID, and scores
     private NetworkVariable<bool> isRunning = new NetworkVariable<bool>(default, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     private NetworkVariable<Vector2> networkMoveDir = new NetworkVariable<Vector2>(default, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     private NetworkVariable<ulong> clientId = new NetworkVariable<ulong>(default, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<int> individualScore = new NetworkVariable<int>(default, NetworkVariableReadPermission.Owner, NetworkVariableWritePermission.Server);
+    private static NetworkVariable<int> highestScore = new NetworkVariable<int>(default, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private static NetworkVariable<ulong> highestScoreClientId = new NetworkVariable<ulong>(default, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    // Reference to the TextMeshProUGUI component for displaying the client ID
-    public TextMeshProUGUI clientIDText;
+    // References to the TextMeshProUGUI components for displaying scores
+    private TextMeshProUGUI clientIDText;
+    private TextMeshProUGUI individualScoreText;
+    private TextMeshProUGUI highestScoreText;
 
     private void Start()
     {
         animator = GetComponent<Animator>();
         spriteRenderer = GetComponent<SpriteRenderer>();
 
-        // If the player is the owner, request the server to update the client ID
+        // Find and assign the TextMeshPro components
+        clientIDText = GetComponentInChildren<TextMeshProUGUI>();
+
         if (IsOwner)
         {
+            // Find UI elements in the scene
+            individualScoreText = GameObject.Find("IndividualScoreText").GetComponent<TextMeshProUGUI>();
+            highestScoreText = GameObject.Find("HighestScoreText").GetComponent<TextMeshProUGUI>();
+
             ulong localClientId = NetworkManager.Singleton.LocalClientId;
             RequestUpdateClientIDServerRpc(localClientId);
         }
 
         // Update the client ID text
         UpdateClientIDText();
+        UpdateIndividualScoreText();
+        UpdateHighestScoreText();
     }
 
     private void Update()
@@ -44,6 +58,19 @@ public class PlayerNetwork : NetworkBehaviour
             MovePlayer();
             // Request the server to update the running state and move direction
             RequestUpdateServerRpc(moveDir != Vector2.zero, moveDir);
+
+            // Handle interaction input
+            if (Input.GetKeyDown(KeyCode.E))
+            {
+                if (heldOrange == null)
+                {
+                    TryPickupOrange();
+                }
+                else
+                {
+                    TryDropOrange();
+                }
+            }
         }
 
         // Handle animation for all instances
@@ -105,22 +132,137 @@ public class PlayerNetwork : NetworkBehaviour
 
     private void UpdateClientIDText()
     {
-        clientIDText.text = $"Client {clientId.Value}";
+        if (clientIDText != null)
+        {
+            clientIDText.text = $"Client {clientId.Value}";
+        }
+    }
+
+    private void UpdateIndividualScoreText()
+    {
+        if (individualScoreText != null)
+        {
+            individualScoreText.text = $"Score: {individualScore.Value}";
+        }
+    }
+
+    private void UpdateHighestScoreText()
+    {
+        if (highestScoreText != null)
+        {
+            highestScoreText.text = $"Highest Score: {highestScore.Value} (Client {highestScoreClientId.Value})";
+        }
+    }
+
+    private void TryPickupOrange()
+    {
+        // Check for nearby oranges to pick up
+        Collider2D[] hitColliders = Physics2D.OverlapCircleAll(transform.position, 1f);
+        foreach (var hitCollider in hitColliders)
+        {
+            if (hitCollider.CompareTag("Orange"))
+            {
+                heldOrange = hitCollider.gameObject;
+                heldOrange.transform.SetParent(transform);
+                heldOrange.transform.localPosition = new Vector3(0, 0.01f, 0); // Position in the mouth
+                break;
+            }
+        }
+    }
+
+    private void TryDropOrange()
+    {
+        // Check for the basket
+        Collider2D[] hitColliders = Physics2D.OverlapCircleAll(transform.position, 1f);
+        foreach (var hitCollider in hitColliders)
+        {
+            if (hitCollider.CompareTag("Basket"))
+            {
+                Destroy(heldOrange);
+                heldOrange = null;
+                AddScoreServerRpc(5);
+                break;
+            }
+        }
+    }
+
+    [ServerRpc]
+    private void AddScoreServerRpc(int points)
+    {
+        individualScore.Value += points;
+        if (individualScore.Value > highestScore.Value)
+        {
+            highestScore.Value = individualScore.Value;
+            highestScoreClientId.Value = clientId.Value;
+        }
+
+        UpdateScoreTextsClientRpc(individualScore.Value, highestScore.Value, highestScoreClientId.Value);
+    }
+
+    [ClientRpc]
+    private void UpdateScoreTextsClientRpc(int newIndividualScore, int newHighestScore, ulong newHighestScoreClientId)
+    {
+        if (individualScoreText != null)
+        {
+            individualScoreText.text = $"Score: {newIndividualScore}";
+        }
+        if (highestScoreText != null)
+        {
+            highestScoreText.text = $"Highest Score: {newHighestScore} (Client {newHighestScoreClientId})";
+        }
     }
 
     // Ensure the client ID text is updated whenever the clientId value changes
     private void OnEnable()
     {
         clientId.OnValueChanged += OnClientIDChanged;
+        individualScore.OnValueChanged += OnIndividualScoreChanged;
+        highestScore.OnValueChanged += OnHighestScoreChanged;
+        highestScoreClientId.OnValueChanged += OnHighestScoreClientIdChanged;
     }
 
     private void OnDisable()
     {
         clientId.OnValueChanged -= OnClientIDChanged;
+        individualScore.OnValueChanged -= OnIndividualScoreChanged;
+        highestScore.OnValueChanged -= OnHighestScoreChanged;
+        highestScoreClientId.OnValueChanged -= OnHighestScoreClientIdChanged;
     }
 
     private void OnClientIDChanged(ulong oldClientId, ulong newClientId)
     {
         UpdateClientIDText();
+    }
+
+    private void OnIndividualScoreChanged(int oldScore, int newScore)
+    {
+        UpdateIndividualScoreText();
+    }
+
+    private void OnHighestScoreChanged(int oldScore, int newScore)
+    {
+        UpdateHighestScoreText();
+    }
+
+    private void OnHighestScoreClientIdChanged(ulong oldClientId, ulong newClientId)
+    {
+        UpdateHighestScoreText();
+    }
+
+    private void OnTriggerEnter2D(Collider2D collision)
+    {
+        if (collision.CompareTag("Orange") && heldOrange == null)
+        {
+            heldOrange = collision.gameObject;
+            heldOrange.transform.SetParent(transform);
+            heldOrange.transform.localPosition = new Vector3(0, 0.01f, 0); // Adjust this position to fit the player
+        }
+
+        if (collision.CompareTag("Basket") && heldOrange != null)
+        {
+            Destroy(heldOrange);
+            heldOrange = null;
+            AddScoreServerRpc(5);
+        }
     }
 }
