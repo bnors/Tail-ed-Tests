@@ -25,11 +25,11 @@ public class PlayerNetwork : NetworkBehaviour
         animator = GetComponent<Animator>();
         spriteRenderer = GetComponent<SpriteRenderer>();
 
-        // If the player is the owner, set the client ID and update it on the server
+        // If the player is the owner, request the server to update the client ID
         if (IsOwner)
         {
-            clientId.Value = NetworkManager.Singleton.LocalClientId;
-            RequestUpdateClientIDServerRpc(clientId.Value);
+            ulong localClientId = NetworkManager.Singleton.LocalClientId;
+            RequestUpdateClientIDServerRpc(localClientId);
         }
 
         // Update the client ID text
