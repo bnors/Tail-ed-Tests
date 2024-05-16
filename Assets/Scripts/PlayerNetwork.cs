@@ -3,29 +3,41 @@ using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.Rendering;
+using TMPro;
 
 public class PlayerNetwork : NetworkBehaviour
 {
-    // Movement direction and speed
     private Vector2 moveDir;
     private float moveSpeed = 3f;
     private Animator animator;
     private SpriteRenderer spriteRenderer;
 
-    // Network variables for running state and movement direction
+    // Network variables for running state, move direction, and client ID
     private NetworkVariable<bool> isRunning = new NetworkVariable<bool>(default, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     private NetworkVariable<Vector2> networkMoveDir = new NetworkVariable<Vector2>(default, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<ulong> clientId = new NetworkVariable<ulong>(default, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+
+    // Reference to the TextMeshProUGUI component for displaying the client ID
+    public TextMeshProUGUI clientIDText;
 
     private void Start()
     {
-        // Get references to the Animator and SpriteRenderer components
         animator = GetComponent<Animator>();
         spriteRenderer = GetComponent<SpriteRenderer>();
+
+        // If the player is the owner, set the client ID and update it on the server
+        if (IsOwner)
+        {
+            clientId.Value = NetworkManager.Singleton.LocalClientId;
+            RequestUpdateClientIDServerRpc(clientId.Value);
+        }
+
+        // Update the client ID text
+        UpdateClientIDText();
     }
 
     private void Update()
     {
-        // Only the owner of the object handles input and movement
         if (IsOwner)
         {
             HandleInput();
@@ -66,6 +78,12 @@ public class PlayerNetwork : NetworkBehaviour
         networkMoveDir.Value = moveDirection;
     }
 
+    [ServerRpc]
+    private void RequestUpdateClientIDServerRpc(ulong clientID)
+    {
+        clientId.Value = clientID;
+    }
+
     private void HandleAnimation()
     {
         // Update the Animator parameter
@@ -73,7 +91,7 @@ public class PlayerNetwork : NetworkBehaviour
 
         if (isRunning.Value)
         {
-            // Flip the sprite based on the synchronized move direction
+            // Use the synchronized move direction for flipping the sprite
             if (networkMoveDir.Value.x < 0)
             {
                 spriteRenderer.flipX = true;
@@ -83,5 +101,26 @@ public class PlayerNetwork : NetworkBehaviour
                 spriteRenderer.flipX = false;
             }
         }
+    }
+
+    private void UpdateClientIDText()
+    {
+        clientIDText.text = $"Client {clientId.Value}";
+    }
+
+    // Ensure the client ID text is updated whenever the clientId value changes
+    private void OnEnable()
+    {
+        clientId.OnValueChanged += OnClientIDChanged;
+    }
+
+    private void OnDisable()
+    {
+        clientId.OnValueChanged -= OnClientIDChanged;
+    }
+
+    private void OnClientIDChanged(ulong oldClientId, ulong newClientId)
+    {
+        UpdateClientIDText();
     }
 }
