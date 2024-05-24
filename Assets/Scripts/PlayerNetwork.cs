@@ -36,10 +36,12 @@ public class PlayerNetwork : NetworkBehaviour
         individualScoreText = GameObject.Find("IndividualScoreText").GetComponent<TextMeshProUGUI>();
         highestScoreText = GameObject.Find("HighestScoreText").GetComponent<TextMeshProUGUI>();
 
+        clientId.OnValueChanged += HandleClientIDChanged;
+
         if (IsServer)
         {
-            ulong localClientId = NetworkManager.Singleton.LocalClientId;
-            RequestUpdateClientIDServerRpc(localClientId);
+            // Triggered each time a client connects
+            NetworkManager.Singleton.OnClientConnectedCallback += AssignClientID;
         }
 
         // Initialization of text fields should be done independently of whether it's a host or a client
@@ -74,6 +76,29 @@ public class PlayerNetwork : NetworkBehaviour
                 }
             }
         }
+    }
+
+    private void OnDestroy()
+    {
+        if (NetworkManager.Singleton)
+        {
+            NetworkManager.Singleton.OnClientConnectedCallback -= AssignClientID;
+        }
+    }
+
+    private void AssignClientID(ulong newClientID)
+    {
+        if (IsServer)
+        {
+            // Assign the connected client's ID as its clientId variable
+            var player = NetworkManager.Singleton.ConnectedClients[newClientID].PlayerObject.GetComponent<PlayerNetwork>();
+            player.clientId.Value = newClientID; // This ensures each client gets and keeps its unique client ID
+        }
+    }
+
+    private void HandleClientIDChanged(ulong previousValue, ulong newValue)
+    {
+        UpdateClientIDText();
     }
 
     void HandleInput()
@@ -139,10 +164,12 @@ public class PlayerNetwork : NetworkBehaviour
         spriteRenderer.flipX = networkMoveDir.Value.x < 0;
     }
 
-    void UpdateClientIDText()
+    private void UpdateClientIDText()
     {
         if (clientIDText != null)
+        {
             clientIDText.text = $"Client {clientId.Value}";
+        }
     }
 
     void UpdateIndividualScoreText()
