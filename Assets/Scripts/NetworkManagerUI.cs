@@ -6,8 +6,6 @@ using UnityEngine.UI;
 
 public class NetworkManagerUI : MonoBehaviour
 {
-
-
     [SerializeField] private Button serverBtn;
     [SerializeField] private Button hostBtn;
     [SerializeField] private Button clientBtn;
@@ -18,15 +16,29 @@ public class NetworkManagerUI : MonoBehaviour
         {
             NetworkManager.Singleton.StartServer();
         });
-        
+
         hostBtn.onClick.AddListener(() =>
         {
             NetworkManager.Singleton.StartHost();
+            DespawnHostPlayer();
         });
-        
+
         clientBtn.onClick.AddListener(() =>
         {
             NetworkManager.Singleton.StartClient();
         });
+    }
+
+    private void DespawnHostPlayer()
+    {
+        // Accessing ServerClientId statically
+        var serverClientId = NetworkManager.ServerClientId;
+        if (NetworkManager.Singleton.ConnectedClients.TryGetValue(serverClientId, out var networkClient))
+        {
+            if (networkClient.PlayerObject != null)
+            {
+                networkClient.PlayerObject.Despawn();
+            }
+        }
     }
 }
