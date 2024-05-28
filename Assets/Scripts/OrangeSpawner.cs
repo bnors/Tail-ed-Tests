@@ -10,7 +10,7 @@ public class OrangeSpawner : NetworkBehaviour
     private float spawnInterval = 5f;
     private bool canSpawn = true;
 
-    private void Start()
+    public override void OnNetworkSpawn()
     {
         if (IsServer)
         {
