@@ -191,72 +191,51 @@ public class PlayerNetwork : NetworkBehaviour
     }
 
     [ServerRpc(RequireOwnership = false)]
-    void RequestPickupOrangeServerRpc(ulong orangeNetworkObjectId, ServerRpcParams rpcParams = default)
+    void RequestPickupOrangeServerRpc(ulong orangeNetworkObjectId)
     {
         if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(orangeNetworkObjectId, out NetworkObject orangeNetworkObject))
         {
-            if (orangeNetworkObject.OwnerClientId == rpcParams.Receive.SenderClientId || orangeNetworkObject.OwnerClientId == 0)
+            if (orangeNetworkObject.OwnerClientId == 0)  // If not owned
             {
                 GameObject orange = orangeNetworkObject.gameObject;
-                if (heldOrange == null)
-                {
-                    orange.transform.SetParent(transform);
-                    orange.transform.localPosition = Vector3.zero;
-                    heldOrange = orange;
-                    orangeNetworkObject.ChangeOwnership(rpcParams.Receive.SenderClientId);
-
-                    OrangeSpawner spawner = FindObjectOfType<OrangeSpawner>(); // Find the spawner
-                    if (spawner != null)
-                    {
-                        StartCoroutine(spawner.SpawnNewOrangeAfterDelay(5)); // Use the spawner's method
-                    }
-                }
-            }
-            else
-            {
-                Debug.LogError($"Ownership mismatch: client {rpcParams.Receive.SenderClientId} tried to pick up an orange owned by {orangeNetworkObject.OwnerClientId}");
+                orangeNetworkObject.ChangeOwnership(NetworkManager.Singleton.LocalClientId);
+                UpdateOrangeStateClientRpc(true, orangeNetworkObjectId, NetworkManager.Singleton.LocalClientId);
             }
         }
     }
 
 
-
     [ClientRpc]
-    void UpdateOrangeStateClientRpc(bool pickedUp, ulong orangeNetworkObjectId)
+    void UpdateOrangeStateClientRpc(bool pickedUp, ulong orangeNetworkObjectId, ulong clientId)
     {
-        if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(orangeNetworkObjectId, out NetworkObject orangeNetworkObject))
+        if (pickedUp)
         {
-            GameObject orange = orangeNetworkObject.gameObject;
-            // You can disable the renderer or collider here to visually indicate that the orange has been picked up
-            if (pickedUp)
+            if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(orangeNetworkObjectId, out NetworkObject orange))
             {
-                orange.GetComponent<Renderer>().enabled = false;
-                orange.GetComponent<Collider2D>().enabled = false;
-            }
-            else
-            {
-                orange.GetComponent<Renderer>().enabled = true;
-                orange.GetComponent<Collider2D>().enabled = true;
+                // Attach orange to the player who picked it up
+                GameObject player = NetworkManager.Singleton.ConnectedClients[clientId].PlayerObject.gameObject;
+                orange.transform.SetParent(player.transform);
+                orange.transform.localPosition = Vector3.zero;  // Position it at the player center
             }
         }
     }
 
     [ServerRpc(RequireOwnership = false)]
-    void RequestDropOrangeServerRpc(ServerRpcParams rpcParams = default)
+    void RequestDropOrangeServerRpc(ulong orangeNetworkObjectId)
     {
-        if (heldOrange != null)
+        if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(orangeNetworkObjectId, out NetworkObject orangeNetworkObject))
         {
-            NetworkObject orangeNetworkObject = heldOrange.GetComponent<NetworkObject>();
-            if (orangeNetworkObject.OwnerClientId == rpcParams.Receive.SenderClientId)
+            if (orangeNetworkObject.OwnerClientId == NetworkManager.Singleton.LocalClientId)
             {
-                heldOrange.transform.SetParent(null);
-                heldOrange = null;
+                // Logic to handle the orange drop
+                GameObject orange = orangeNetworkObject.gameObject;
+                orange.transform.SetParent(null);  // Detach orange from player
                 orangeNetworkObject.ChangeOwnership(0); // Reset ownership to no one
                 orangeNetworkObject.Despawn();
             }
             else
             {
-                Debug.LogError($"Drop mismatch: client {rpcParams.Receive.SenderClientId} tried to drop an orange they do not own.");
+                Debug.LogError("Drop mismatch: client tried to drop an orange they do not own.");
             }
         }
     }
@@ -363,14 +342,14 @@ public class PlayerNetwork : NetworkBehaviour
 
     void OnTriggerEnter2D(Collider2D collision)
     {
-        if (collision.CompareTag("Orange") && heldOrange == null)
-        {
-            RequestPickupOrangeServerRpc(collision.gameObject.GetComponent<NetworkObject>().NetworkObjectId);
-        }
-
         if (collision.CompareTag("Basket") && heldOrange != null)
         {
-            RequestDropOrangeServerRpc();
+            if (IsOwner)  // Ensure only the owner can score
+            {
+                AddScore(5);  // Add score to the client
+                NetworkObject heldOrangeNetworkObject = heldOrange.GetComponent<NetworkObject>();
+                RequestDropOrangeServerRpc(heldOrangeNetworkObject.NetworkObjectId);
+            }
         }
     }
 }
