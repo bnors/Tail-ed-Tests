@@ -14,7 +14,8 @@ public class OrangeSpawner : NetworkBehaviour
     {
         if (IsServer)
         {
-            Debug.Log("Server starting, initializing orange spawning.");
+            Debug.Log("Server initializing, attempting first orange spawn.");
+            SpawnOrangeAtPosition(); // Immediately spawn the first orange.
             StartCoroutine(SpawnOrange());
         }
     }
@@ -33,16 +34,22 @@ public class OrangeSpawner : NetworkBehaviour
 
     public void SpawnOrangeAtPosition()
     {
+        if (!IsServer)
+        {
+            Debug.LogError("SpawnOrangeAtPosition called from a non-server instance.");
+            return;
+        }
+
         GameObject orange = Instantiate(orangePrefab, spawnPoint.position, Quaternion.identity);
         NetworkObject networkObject = orange.GetComponent<NetworkObject>();
         if (networkObject != null)
         {
             networkObject.Spawn();
-            Debug.Log("Orange Spawner: Orange spawned successfully.");
+            Debug.Log("Orange spawned successfully at position: " + spawnPoint.position);
         }
         else
         {
-            Debug.LogError("Failed to spawn orange, NetworkObject component missing.");
+            Debug.LogError("Failed to spawn orange: NetworkObject component is missing on the prefab.");
         }
     }
 
