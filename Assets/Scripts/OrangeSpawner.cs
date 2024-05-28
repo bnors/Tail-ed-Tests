@@ -14,42 +14,41 @@ public class OrangeSpawner : NetworkBehaviour
     {
         if (IsServer)
         {
-            Debug.Log("Server initializing, attempting first orange spawn.");
-            SpawnOrangeAtPosition(); // Immediately spawn the first orange.
+            Debug.Log("Server started, beginning to spawn oranges.");
             StartCoroutine(SpawnOrange());
+        }
+        else
+        {
+            Debug.Log("Not server, orange spawner will not spawn oranges.");
         }
     }
 
     private IEnumerator SpawnOrange()
     {
+        Debug.Log("SpawnOrange coroutine started.");
         while (true)
         {
             yield return new WaitUntil(() => canSpawn);
-            Debug.Log("Conditions met for spawning an orange.");
+            Debug.Log("Condition to spawn an orange met.");
             yield return new WaitForSeconds(spawnInterval);
+            Debug.Log("Spawning orange now.");
             SpawnOrangeAtPosition();
-            canSpawn = false; // Prevent continuous spawning without control
+            canSpawn = false;  // Prevent continuous spawning without control
         }
     }
 
     public void SpawnOrangeAtPosition()
     {
-        if (!IsServer)
-        {
-            Debug.LogError("SpawnOrangeAtPosition called from a non-server instance.");
-            return;
-        }
-
         GameObject orange = Instantiate(orangePrefab, spawnPoint.position, Quaternion.identity);
         NetworkObject networkObject = orange.GetComponent<NetworkObject>();
         if (networkObject != null)
         {
             networkObject.Spawn();
-            Debug.Log("Orange spawned successfully at position: " + spawnPoint.position);
+            Debug.Log("Orange Spawner: Orange spawned successfully at " + spawnPoint.position);
         }
         else
         {
-            Debug.LogError("Failed to spawn orange: NetworkObject component is missing on the prefab.");
+            Debug.LogError("Failed to spawn orange, NetworkObject component missing.");
         }
     }
 
