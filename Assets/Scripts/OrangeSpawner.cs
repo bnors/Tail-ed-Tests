@@ -8,12 +8,13 @@ public class OrangeSpawner : NetworkBehaviour
     public GameObject orangePrefab;
     public Transform spawnPoint;
     private float spawnInterval = 5f;
-    private bool canSpawn = true;  // Initially set to true to spawn the first orange
+    private bool canSpawn = true;
 
     private void Start()
     {
         if (IsServer)
         {
+            Debug.Log("Server starting, initializing orange spawning.");
             StartCoroutine(SpawnOrange());
         }
     }
@@ -22,10 +23,11 @@ public class OrangeSpawner : NetworkBehaviour
     {
         while (true)
         {
-            yield return new WaitUntil(() => canSpawn);  // Wait until it's allowed to spawn
-            yield return new WaitForSeconds(spawnInterval);  // Then wait the spawn interval
+            yield return new WaitUntil(() => canSpawn);
+            Debug.Log("Conditions met for spawning an orange.");
+            yield return new WaitForSeconds(spawnInterval);
             SpawnOrangeAtPosition();
-            canSpawn = false;  // Prevent further spawning until the current orange is picked up
+            canSpawn = false; // Prevent continuous spawning without control
         }
     }
 
@@ -44,14 +46,17 @@ public class OrangeSpawner : NetworkBehaviour
         }
     }
 
-    public void OrangePickedUp()
-    {
-        StartCoroutine(SpawnNewOrangeAfterDelay(5f));  // Schedule next orange spawn
-    }
-
     public IEnumerator SpawnNewOrangeAfterDelay(float delay)
     {
         yield return new WaitForSeconds(delay);
-        canSpawn = true;  // Allow new orange to spawn after the delay
+        canSpawn = true; // Allow new orange to spawn
+        Debug.Log("Spawn new orange after delay.");
+        SpawnOrangeAtPosition(); // Call the method to spawn the orange
+    }
+
+    public void OrangePickedUp()
+    {
+        Debug.Log("Orange picked up, scheduling new spawn.");
+        StartCoroutine(SpawnNewOrangeAfterDelay(5f));
     }
 }

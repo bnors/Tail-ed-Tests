@@ -240,18 +240,20 @@ public class PlayerNetwork : NetworkBehaviour
         }
     }
 
-    void TryPickupOrange()
+    public void TryPickupOrange()
     {
         Collider2D[] hitColliders = Physics2D.OverlapCircleAll(transform.position, 1f);
         foreach (Collider2D hit in hitColliders)
         {
             if (hit.CompareTag("Orange"))
             {
+                Debug.Log($"Trying to pick up orange with ID: {hit.GetComponent<NetworkObject>().NetworkObjectId}");
                 RequestPickupOrangeServerRpc(hit.GetComponent<NetworkObject>().NetworkObjectId);
                 break;
             }
         }
     }
+
 
     void TryDropOrange()
     {
@@ -277,6 +279,7 @@ public class PlayerNetwork : NetworkBehaviour
         if (!IsServer) return;
 
         individualScore.Value += points;
+        Debug.Log($"Adding score: {points} to client {clientId.Value}, Total score: {individualScore.Value}");
         if (individualScore.Value > highestScore.Value)
         {
             highestScore.Value = individualScore.Value;
