@@ -129,13 +129,8 @@ public class PlayerNetwork : NetworkBehaviour
     [ClientRpc]
     void UpdateAnimationStateClientRpc(bool running, Vector2 moveDirection)
     {
-        // Update client-side variables if not the owner (server has already updated the owner)
-        if (!IsOwner)
-        {
-            isRunning.Value = running;
-            networkMoveDir.Value = moveDirection;
-        }
-        HandleAnimation();  // Ensure this updates the animation based on the latest state
+        // Directly pass the running state and direction to the animation handler
+        HandleAnimation(running, moveDirection);
     }
 
     void UpdateMovementState(bool running, Vector2 moveDirection)
@@ -158,10 +153,12 @@ public class PlayerNetwork : NetworkBehaviour
             clientIDText.text = $"Client {id}";
     }
 
-    void HandleAnimation()
+    void HandleAnimation(bool isRunning, Vector2 moveDir)
     {
-        animator.SetBool("isRunning", isRunning.Value);
-        spriteRenderer.flipX = networkMoveDir.Value.x < 0;
+        // Update the animator with the running state
+        animator.SetBool("isRunning", isRunning);
+        // Determine the sprite flip based on the x component of the move direction
+        spriteRenderer.flipX = moveDir.x < 0;
     }
 
     private void UpdateClientIDText()
