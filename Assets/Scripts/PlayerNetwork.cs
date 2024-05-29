@@ -195,19 +195,22 @@ public class PlayerNetwork : NetworkBehaviour
     {
         if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(orangeNetworkObjectId, out NetworkObject orangeNetworkObject))
         {
-            if (orangeNetworkObject.IsSpawned && orangeNetworkObject.OwnerClientId == 0) // If not owned
+            Debug.Log($"Server: Received pickup request for orange {orangeNetworkObjectId} from client {rpcParams.Receive.SenderClientId}");
+            if (orangeNetworkObject.IsSpawned && orangeNetworkObject.OwnerClientId == 0)  // If not owned
             {
-                var clientPlayer = NetworkManager.Singleton.ConnectedClients[rpcParams.Receive.SenderClientId].PlayerObject;
                 orangeNetworkObject.ChangeOwnership(rpcParams.Receive.SenderClientId);
+                var clientPlayer = NetworkManager.Singleton.ConnectedClients[rpcParams.Receive.SenderClientId].PlayerObject;
                 Vector3 playerPosition = clientPlayer.transform.position;
-                UpdateOrangeStateClientRpc(true, orangeNetworkObjectId, playerPosition);
+                Debug.Log($"Server: Changing ownership of orange {orangeNetworkObjectId} and sending update to clients.");
+                UpdateOrangeStateClientRpc(true, orangeNetworkObjectId, playerPosition, rpcParams.Receive.SenderClientId);
             }
         }
     }
 
     [ClientRpc]
-    void UpdateOrangeStateClientRpc(bool pickedUp, ulong orangeNetworkObjectId, Vector3 playerPosition)
+    void UpdateOrangeStateClientRpc(bool pickedUp, ulong orangeNetworkObjectId, Vector3 playerPosition, ulong clientId)
     {
+        Debug.Log($"Client: Received update to change orange state {pickedUp} for orange {orangeNetworkObjectId}");
         var orangeNetworkObject = NetworkManager.Singleton.SpawnManager.SpawnedObjects[orangeNetworkObjectId];
         if (orangeNetworkObject != null)
         {
@@ -215,18 +218,28 @@ public class PlayerNetwork : NetworkBehaviour
 
             if (pickedUp)
             {
-                // Attach the orange to the player's position received from the server
+                Debug.Log($"Client: Moving orange to player at {playerPosition}");
                 orange.transform.position = playerPosition;
-                orange.transform.SetParent(null); // You can decide to set or not set a parent based on your game logic
-                heldOrange = orange; // Keep a reference if needed for further actions
+                orange.transform.SetParent(null); // Optional: set to player's transform if you want it to follow the player
+                if (NetworkManager.Singleton.LocalClientId == clientId)
+                {
+                    heldOrange = orange; // Track locally held orange if this client is the one that picked it up
+                }
             }
             else
             {
-                // Reset the orange's state when not picked up
+                Debug.Log("Client: Resetting orange position and deactivating.");
                 orange.transform.SetParent(null);
                 orange.SetActive(false);
-                heldOrange = null; // Clear the held orange reference
+                if (heldOrange == orange)
+                {
+                    heldOrange = null; // Clear reference if this was the held orange
+                }
             }
+        }
+        else
+        {
+            Debug.LogError("Client: Failed to find orange in network manager's spawned objects.");
         }
     }
 
