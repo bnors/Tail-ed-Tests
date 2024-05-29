@@ -14,26 +14,19 @@ public class OrangeSpawner : NetworkBehaviour
     {
         if (IsServer)
         {
-            Debug.Log("Server started, beginning to spawn oranges.");
+            Debug.Log("Server started, beginning to spawn the first orange.");
             StartCoroutine(SpawnOrange());
-        }
-        else
-        {
-            Debug.Log("Not server, orange spawner will not spawn oranges.");
         }
     }
 
     private IEnumerator SpawnOrange()
     {
-        Debug.Log("SpawnOrange coroutine started.");
         while (true)
         {
             yield return new WaitUntil(() => canSpawn);
-            Debug.Log("Condition to spawn an orange met.");
-            yield return new WaitForSeconds(spawnInterval);
-            Debug.Log("Spawning orange now.");
+            Debug.Log("Spawning orange now after interval.");
             SpawnOrangeAtPosition();
-            canSpawn = false;  // Prevent continuous spawning without control
+            canSpawn = false;  // Ensure no new oranges spawn until explicitly allowed
         }
     }
 
@@ -44,7 +37,7 @@ public class OrangeSpawner : NetworkBehaviour
         if (networkObject != null)
         {
             networkObject.Spawn();
-            Debug.Log("Orange Spawner: Orange spawned successfully at " + spawnPoint.position);
+            Debug.Log($"Orange spawned successfully at {spawnPoint.position}");
         }
         else
         {
@@ -52,18 +45,16 @@ public class OrangeSpawner : NetworkBehaviour
         }
     }
 
-    public IEnumerator SpawnNewOrangeAfterDelay(float delay)
-    {
-        yield return new WaitForSeconds(delay);
-        canSpawn = true; // Allow new orange to spawn
-        Debug.Log("Spawn new orange after delay.");
-        SpawnOrangeAtPosition(); // Call the method to spawn the orange
-    }
-
     public void OrangePickedUp()
     {
         Debug.Log("Orange picked up, scheduling new spawn.");
-        canSpawn = true;  // Ensure this is set so new oranges can spawn.
-        StartCoroutine(SpawnNewOrangeAfterDelay(5f));  // Make sure this coroutine waits for 5 seconds before setting canSpawn to true.
+        StartCoroutine(SpawnNewOrangeAfterDelay(5f));
+    }
+
+    private IEnumerator SpawnNewOrangeAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        canSpawn = true;  // Allow spawning new orange
+        Debug.Log("Can spawn new orange now.");
     }
 }

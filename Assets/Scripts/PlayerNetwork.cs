@@ -208,7 +208,7 @@ public class PlayerNetwork : NetworkBehaviour
     [ClientRpc]
     void UpdateScoreTextsClientRpc(int newIndividualScore, int newHighestScore, ulong newHighestScoreClientId)
     {
-        Debug.Log($"Client: Received score update. New Individual Score: {newIndividualScore}, New Highest Score: {newHighestScore}");
+        Debug.Log($"Client: Updating score texts. New scores - Individual: {newIndividualScore}, Highest: {newHighestScore} by Client {newHighestScoreClientId}");
         if (individualScoreText != null)
             individualScoreText.text = $"Score: {newIndividualScore}";
         if (highestScoreText != null)
@@ -275,18 +275,17 @@ public class PlayerNetwork : NetworkBehaviour
     [ServerRpc(RequireOwnership = true)]
     void RequestDropOrangeServerRpc(ulong orangeNetworkObjectId)
     {
-        Debug.Log($"Server: Received drop request for orange {orangeNetworkObjectId}");
         if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(orangeNetworkObjectId, out NetworkObject orangeNetworkObject))
         {
             if (orangeNetworkObject.OwnerClientId == NetworkManager.Singleton.LocalClientId)
             {
-                Debug.Log("Server: Despawning orange and updating score.");
+                Debug.Log($"Server: Processing drop request for orange {orangeNetworkObjectId}.");
                 orangeNetworkObject.Despawn();
                 AddScore(5, NetworkManager.Singleton.LocalClientId);
             }
             else
             {
-                Debug.LogError("Server: Owner mismatch or orange not found.");
+                Debug.LogError($"Server: Ownership mismatch or orange {orangeNetworkObjectId} not found when trying to drop.");
             }
         }
     }
@@ -294,11 +293,10 @@ public class PlayerNetwork : NetworkBehaviour
     // Attempt to pick up an orange
     public void TryPickupOrange()
     {
-        Debug.Log("Attempting to pick up an orange.");
         if (heldOrange != null)
         {
             Debug.Log("Already holding an orange.");
-            return;  // Exit if already holding an orange
+            return;
         }
 
         Collider2D[] hitColliders = Physics2D.OverlapCircleAll(transform.position, 1f);
@@ -308,7 +306,6 @@ public class PlayerNetwork : NetworkBehaviour
             {
                 Debug.Log($"Trying to pick up orange with ID: {hit.GetComponent<NetworkObject>().NetworkObjectId}");
                 RequestPickupOrangeServerRpc(hit.GetComponent<NetworkObject>().NetworkObjectId);
-                break;
             }
         }
     }
@@ -318,17 +315,13 @@ public class PlayerNetwork : NetworkBehaviour
     {
         if (heldOrange != null && IsOwner)
         {
-            Debug.Log("Checking for basket collision to drop orange.");
             Collider2D[] hitColliders = Physics2D.OverlapCircleAll(transform.position, 0.5f);
             foreach (Collider2D hit in hitColliders)
             {
                 if (hit.CompareTag("Basket"))
                 {
+                    Debug.Log("Dropping orange into basket.");
                     RequestDropOrangeServerRpc(heldOrange.GetComponent<NetworkObject>().NetworkObjectId);
-                    // Call AddScore with correct clientId
-                    AddScore(5, NetworkManager.Singleton.LocalClientId);
-                    FindObjectOfType<OrangeSpawner>().OrangePickedUp(); // Ensure this is called
-                    break;
                 }
             }
         }
