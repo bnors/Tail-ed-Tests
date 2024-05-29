@@ -283,6 +283,9 @@ public class PlayerNetwork : NetworkBehaviour
 
                 // Update the score for the client who dropped the orange
                 AddScore(5, NetworkManager.Singleton.LocalClientId);
+
+                // Log the despawning for debugging
+                Debug.Log($"Orange {orangeNetworkObjectId} despawned by client {NetworkManager.Singleton.LocalClientId}");
             }
         }
     }
@@ -313,13 +316,18 @@ public class PlayerNetwork : NetworkBehaviour
     {
         if (heldOrange != null && IsOwner)
         {
+            Debug.Log("Checking for basket collision to drop orange.");
             Collider2D[] hitColliders = Physics2D.OverlapCircleAll(transform.position, 0.5f);
             foreach (Collider2D hit in hitColliders)
             {
                 if (hit.CompareTag("Basket"))
                 {
+                    Debug.Log("Basket detected, attempting to drop orange.");
                     // Tell the server to process the orange dropping
                     RequestDropOrangeServerRpc(heldOrange.GetComponent<NetworkObject>().NetworkObjectId);
+                    // Immediately remove the orange from the player to prevent duplicate drops
+                    heldOrange.SetActive(false);
+                    heldOrange = null;
                     break;
                 }
             }
