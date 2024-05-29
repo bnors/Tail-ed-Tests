@@ -195,7 +195,7 @@ public class PlayerNetwork : NetworkBehaviour
     {
         if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(orangeNetworkObjectId, out NetworkObject orangeNetworkObject))
         {
-            if (orangeNetworkObject.OwnerClientId == 0)  // If not owned
+            if (orangeNetworkObject.IsSpawned && orangeNetworkObject.OwnerClientId == 0)  // If not owned
             {
                 orangeNetworkObject.ChangeOwnership(rpcParams.Receive.SenderClientId);
                 UpdateOrangeStateClientRpc(true, orangeNetworkObjectId, rpcParams.Receive.SenderClientId);
@@ -203,53 +203,51 @@ public class PlayerNetwork : NetworkBehaviour
         }
     }
 
-
     [ClientRpc]
     void UpdateOrangeStateClientRpc(bool pickedUp, ulong orangeNetworkObjectId, ulong clientId)
     {
-        if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(orangeNetworkObjectId, out NetworkObject orangeNetworkObject))
+        if (NetworkManager.Singleton.IsServer) return; // Guard to prevent execution on the server
+
+        NetworkObject orangeNetworkObject;
+        if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(orangeNetworkObjectId, out orangeNetworkObject))
         {
             GameObject orange = orangeNetworkObject.gameObject;
+            Transform playerTransform = null;
 
-            // Only adjust the transform if this client is the owner of the orange
-            if (NetworkManager.Singleton.LocalClientId == clientId)
+            // Check if the client ID is valid and has a player object
+            if (NetworkManager.Singleton.ConnectedClients.TryGetValue(clientId, out var client))
             {
-                if (pickedUp)
+                playerTransform = client.PlayerObject.transform;
+            }
+
+            if (playerTransform != null && pickedUp)
+            {
+                // Perform these actions only on the owning client
+                if (NetworkManager.Singleton.LocalClientId == clientId)
                 {
-                    // Position the orange at the player's central position (0,0,0 relative to the player)
-                    var player = NetworkManager.Singleton.LocalClient.PlayerObject;
-                    if (player != null)
-                    {
-                        orange.transform.position = player.transform.position;
-                        orange.transform.SetParent(player.transform);  // Optional: Attach to follow player
-                    }
+                    orange.transform.SetParent(playerTransform);
+                    orange.transform.localPosition = Vector3.zero;
+                    heldOrange = orange; // Track the held orange locally if needed
                 }
-                else
-                {
-                    // Reset parent to null and reactivate the orange for pickup
-                    orange.transform.SetParent(null);
-                    orange.SetActive(true);
-                }
+            }
+            else
+            {
+                // Reset parent on all clients
+                orange.transform.SetParent(null);
+                orange.SetActive(false); // Optionally deactivate instead of resetting the position
             }
         }
     }
 
-    [ServerRpc(RequireOwnership = false)]
+    [ServerRpc(RequireOwnership = true)]
     void RequestDropOrangeServerRpc(ulong orangeNetworkObjectId)
     {
         if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(orangeNetworkObjectId, out NetworkObject orangeNetworkObject))
         {
             if (orangeNetworkObject.OwnerClientId == NetworkManager.Singleton.LocalClientId)
             {
-                // Logic to handle the orange drop
-                GameObject orange = orangeNetworkObject.gameObject;
-                orange.transform.SetParent(null);  // Detach orange from player
-                orangeNetworkObject.ChangeOwnership(0); // Reset ownership to no one
-                orangeNetworkObject.Despawn();
-            }
-            else
-            {
-                Debug.LogError("Drop mismatch: client tried to drop an orange they do not own.");
+                orangeNetworkObject.Despawn();  // Despawn the orange
+                AddScore(5, orangeNetworkObject.OwnerClientId);  // Update score for the client who dropped the orange
             }
         }
     }
@@ -277,35 +275,36 @@ public class PlayerNetwork : NetworkBehaviour
 
     void TryDropOrange()
     {
-        if (heldOrange != null)
+        if (heldOrange != null && IsOwner)
         {
             Collider2D[] hitColliders = Physics2D.OverlapCircleAll(transform.position, 0.5f);
             foreach (Collider2D hit in hitColliders)
             {
                 if (hit.CompareTag("Basket"))
                 {
-                    AddScore(5);
-                    FindObjectOfType<OrangeSpawner>().OrangePickedUp();
-                    Destroy(heldOrange);
-                    heldOrange = null;
+                    RequestDropOrangeServerRpc(heldOrange.GetComponent<NetworkObject>().NetworkObjectId);
+                    // Call AddScore with correct clientId
+                    AddScore(5, NetworkManager.Singleton.LocalClientId);
                     break;
                 }
             }
         }
     }
 
-    public void AddScore(int points)
+    public void AddScore(int points, ulong clientId)
     {
         if (!IsServer) return;
 
-        individualScore.Value += points;
-        Debug.Log($"Adding score: {points} to client {clientId.Value}, Total score: {individualScore.Value}");
-        if (individualScore.Value > highestScore.Value)
+        var playerNetwork = NetworkManager.Singleton.ConnectedClients[clientId].PlayerObject.GetComponent<PlayerNetwork>();
+        playerNetwork.individualScore.Value += points;
+
+        if (playerNetwork.individualScore.Value > highestScore.Value)
         {
-            highestScore.Value = individualScore.Value;
-            highestScoreClientId.Value = NetworkManager.Singleton.LocalClientId;
+            highestScore.Value = playerNetwork.individualScore.Value;
+            highestScoreClientId.Value = clientId;
         }
-        UpdateScoreTextsClientRpc(individualScore.Value, highestScore.Value, highestScoreClientId.Value);
+
+        UpdateScoreTextsClientRpc(playerNetwork.individualScore.Value, highestScore.Value, highestScoreClientId.Value);
     }
 
     void OnEnable()
@@ -369,9 +368,10 @@ public class PlayerNetwork : NetworkBehaviour
         {
             if (IsOwner)  // Ensure only the owner can score
             {
-                AddScore(5);  // Add score to the client
-                NetworkObject heldOrangeNetworkObject = heldOrange.GetComponent<NetworkObject>();
-                RequestDropOrangeServerRpc(heldOrangeNetworkObject.NetworkObjectId);
+                // Get the client ID of the owner of the held orange
+                ulong ownerId = heldOrange.GetComponent<NetworkObject>().OwnerClientId;
+                AddScore(5, ownerId);  // Add score to the client who owns the orange
+                RequestDropOrangeServerRpc(heldOrange.GetComponent<NetworkObject>().NetworkObjectId);
             }
         }
     }
