@@ -208,7 +208,7 @@ public class PlayerNetwork : NetworkBehaviour
     }
 
     [ClientRpc]
-    void UpdateOrangeStateClientRpc(bool pickedUp, ulong orangeNetworkObjectId, Vector3 playerPosition, ulong clientId)
+    void UpdateOrangeStateClientRpc(bool pickedUp, ulong orangeNetworkObjectId, Vector3 newPosition, ulong clientId)
     {
         Debug.Log($"Client: Received update to change orange state {pickedUp} for orange {orangeNetworkObjectId}");
         var orangeNetworkObject = NetworkManager.Singleton.SpawnManager.SpawnedObjects[orangeNetworkObjectId];
@@ -218,22 +218,23 @@ public class PlayerNetwork : NetworkBehaviour
 
             if (pickedUp)
             {
-                Debug.Log($"Client: Moving orange to player at {playerPosition}");
-                orange.transform.position = playerPosition;
-                orange.transform.SetParent(null); // Optional: set to player's transform if you want it to follow the player
+                Debug.Log($"Client: Moving orange to new position at {newPosition}");
+                // Directly setting position for debugging
+                orange.transform.position = newPosition;
+                // If this is the owner client, track the orange
                 if (NetworkManager.Singleton.LocalClientId == clientId)
                 {
-                    heldOrange = orange; // Track locally held orange if this client is the one that picked it up
+                    heldOrange = orange;
                 }
             }
             else
             {
                 Debug.Log("Client: Resetting orange position and deactivating.");
-                orange.transform.SetParent(null);
+                orange.transform.position = newPosition;  // You could adjust this to a drop-off point
                 orange.SetActive(false);
                 if (heldOrange == orange)
                 {
-                    heldOrange = null; // Clear reference if this was the held orange
+                    heldOrange = null;
                 }
             }
         }
