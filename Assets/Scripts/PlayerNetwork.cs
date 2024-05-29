@@ -211,24 +211,25 @@ public class PlayerNetwork : NetworkBehaviour
         {
             GameObject orange = orangeNetworkObject.gameObject;
 
-            if (pickedUp)
+            // Only adjust the transform if this client is the owner of the orange
+            if (NetworkManager.Singleton.LocalClientId == clientId)
             {
-                // Find the client's player object
-                if (NetworkManager.Singleton.ConnectedClients.TryGetValue(clientId, out NetworkClient client))
+                if (pickedUp)
                 {
-                    if (client.PlayerObject != null)
+                    // Position the orange at the player's central position (0,0,0 relative to the player)
+                    var player = NetworkManager.Singleton.LocalClient.PlayerObject;
+                    if (player != null)
                     {
-                        // Position the orange at the player's central position (0,0,0 relative to the player)
-                        orange.transform.position = client.PlayerObject.transform.position;
-                        orange.transform.SetParent(client.PlayerObject.transform);  // Optional: Attach to follow player
+                        orange.transform.position = player.transform.position;
+                        orange.transform.SetParent(player.transform);  // Optional: Attach to follow player
                     }
                 }
-            }
-            else
-            {
-                // Reset parent to null and activate or position the orange as required
-                orange.transform.SetParent(null);
-                orange.SetActive(true);
+                else
+                {
+                    // Reset parent to null and reactivate the orange for pickup
+                    orange.transform.SetParent(null);
+                    orange.SetActive(true);
+                }
             }
         }
     }
@@ -255,6 +256,12 @@ public class PlayerNetwork : NetworkBehaviour
 
     public void TryPickupOrange()
     {
+        if (heldOrange != null)
+        {
+            Debug.Log("Already holding an orange.");
+            return;  // Exit if already holding an orange
+        }
+
         Collider2D[] hitColliders = Physics2D.OverlapCircleAll(transform.position, 1f);
         foreach (Collider2D hit in hitColliders)
         {
