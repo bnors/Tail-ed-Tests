@@ -219,55 +219,52 @@ public class PlayerNetwork : NetworkBehaviour
     [ServerRpc(RequireOwnership = false)]
     void RequestPickupOrangeServerRpc(ulong orangeNetworkObjectId, ServerRpcParams rpcParams = default)
     {
-        Debug.Log($"Server: Received pickup request for orange {orangeNetworkObjectId} from client {rpcParams.Receive.SenderClientId}");
         if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(orangeNetworkObjectId, out NetworkObject orangeNetworkObject))
         {
-            Debug.Log($"Server: Found orange in SpawnManager. Current owner: {orangeNetworkObject.OwnerClientId}");
-            if (orangeNetworkObject.IsSpawned && orangeNetworkObject.OwnerClientId == 0)
+            if (orangeNetworkObject.IsSpawned && orangeNetworkObject.OwnerClientId == 0)  // Ensure it's unowned
             {
                 orangeNetworkObject.ChangeOwnership(rpcParams.Receive.SenderClientId);
-                Debug.Log($"Server: Changing ownership of orange {orangeNetworkObjectId} and sending update to clients.");
                 UpdateOrangeStateClientRpc(true, orangeNetworkObjectId, rpcParams.Receive.SenderClientId);
             }
-            else
-            {
-                Debug.Log("Server: Orange is already owned or not spawned.");
-            }
-        }
-        else
-        {
-            Debug.LogError("Server: Orange not found in SpawnManager.");
         }
     }
+
 
     // Client RPC to handle updates on orange state
     [ClientRpc]
     void UpdateOrangeStateClientRpc(bool pickedUp, ulong orangeNetworkObjectId, ulong clientId)
     {
         Debug.Log($"Client: Received update to change orange state {pickedUp} for orange {orangeNetworkObjectId}");
-        var orangeNetworkObject = NetworkManager.Singleton.SpawnManager.SpawnedObjects[orangeNetworkObjectId];
-        if (orangeNetworkObject != null)
+
+        if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(orangeNetworkObjectId, out NetworkObject orangeNetworkObject))
         {
             GameObject orange = orangeNetworkObject.gameObject;
-            Debug.Log($"Client: Processing state change for orange {orangeNetworkObjectId}. Picked up: {pickedUp}");
-            if (pickedUp && NetworkManager.Singleton.LocalClientId == clientId)
+            if (pickedUp)
             {
-                Debug.Log($"Client: Assigning picked up orange to local player.");
-                orange.transform.SetParent(FindObjectOfType<PlayerNetwork>().transform);
-                orange.transform.localPosition = Vector3.zero;
-                heldOrange = orange;
+                if (NetworkManager.Singleton.LocalClientId == clientId)
+                {
+                    // Position the orange near the player without changing the parent
+                    orange.transform.position = NetworkManager.Singleton.ConnectedClients[clientId].PlayerObject.transform.position;
+                    heldOrange = orange;  // Just reference the held orange
+                }
             }
             else
             {
-                Debug.Log("Client: Resetting orange position and visibility.");
-                orange.transform.SetParent(null);
-                orange.SetActive(false);
-                heldOrange = null;
+                if (NetworkManager.Singleton.IsServer)
+                {
+                    // Server should handle deactivation and clearing of the parent
+                    orange.transform.SetParent(null);
+                    orange.SetActive(false);
+                }
+                if (heldOrange == orange)
+                {
+                    heldOrange = null;  // Clear the reference if the orange is dropped
+                }
             }
         }
         else
         {
-            Debug.LogError("Client: Failed to find orange in network manager's spawned objects.");
+            Debug.LogError($"Client: Failed to find orange with ID {orangeNetworkObjectId} in the network manager's spawned objects.");
         }
     }
 
@@ -277,15 +274,10 @@ public class PlayerNetwork : NetworkBehaviour
     {
         if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(orangeNetworkObjectId, out NetworkObject orangeNetworkObject))
         {
-            if (orangeNetworkObject.OwnerClientId == NetworkManager.Singleton.LocalClientId)
+            if (orangeNetworkObject.OwnerClientId == NetworkManager.Singleton.LocalClientId)  // Check if the dropper is the owner
             {
-                Debug.Log($"Server: Processing drop request for orange {orangeNetworkObjectId}.");
                 orangeNetworkObject.Despawn();
-                AddScore(5, NetworkManager.Singleton.LocalClientId);
-            }
-            else
-            {
-                Debug.LogError($"Server: Ownership mismatch or orange {orangeNetworkObjectId} not found when trying to drop.");
+                AddScore(5, orangeNetworkObject.OwnerClientId);  // Reward the correct client
             }
         }
     }
