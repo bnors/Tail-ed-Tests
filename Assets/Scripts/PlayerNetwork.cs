@@ -219,13 +219,25 @@ public class PlayerNetwork : NetworkBehaviour
     [ServerRpc(RequireOwnership = false)]
     void RequestPickupOrangeServerRpc(ulong orangeNetworkObjectId, ServerRpcParams rpcParams = default)
     {
+        Debug.Log($"Server: Received pickup request for orange {orangeNetworkObjectId} from client {rpcParams.Receive.SenderClientId}");
         if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(orangeNetworkObjectId, out NetworkObject orangeNetworkObject))
         {
-            if (orangeNetworkObject.IsSpawned && orangeNetworkObject.OwnerClientId == 0)  // Ensure it's unowned
+            Debug.Log($"Server: Found orange in SpawnManager. Current owner: {orangeNetworkObject.OwnerClientId}");
+            if (orangeNetworkObject.IsSpawned && orangeNetworkObject.OwnerClientId == 0)
             {
                 orangeNetworkObject.ChangeOwnership(rpcParams.Receive.SenderClientId);
+                Debug.Log($"Server: Changing ownership of orange {orangeNetworkObjectId} and sending update to clients.");
+                Vector3 playerPosition = NetworkManager.Singleton.ConnectedClients[rpcParams.Receive.SenderClientId].PlayerObject.transform.position;
                 UpdateOrangeStateClientRpc(true, orangeNetworkObjectId, rpcParams.Receive.SenderClientId);
             }
+            else
+            {
+                Debug.Log("Server: Orange is already owned or not spawned.");
+            }
+        }
+        else
+        {
+            Debug.LogError("Server: Orange not found in SpawnManager.");
         }
     }
 
@@ -272,12 +284,18 @@ public class PlayerNetwork : NetworkBehaviour
     [ServerRpc(RequireOwnership = true)]
     void RequestDropOrangeServerRpc(ulong orangeNetworkObjectId)
     {
+        Debug.Log($"Server: Received drop request for orange {orangeNetworkObjectId}");
         if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(orangeNetworkObjectId, out NetworkObject orangeNetworkObject))
         {
-            if (orangeNetworkObject.OwnerClientId == NetworkManager.Singleton.LocalClientId)  // Check if the dropper is the owner
+            if (orangeNetworkObject.OwnerClientId == NetworkManager.Singleton.LocalClientId)
             {
+                Debug.Log("Server: Despawning orange and updating score.");
                 orangeNetworkObject.Despawn();
-                AddScore(5, orangeNetworkObject.OwnerClientId);  // Reward the correct client
+                AddScore(5, NetworkManager.Singleton.LocalClientId);
+            }
+            else
+            {
+                Debug.LogError("Server: Owner mismatch or orange not found.");
             }
         }
     }
@@ -285,10 +303,11 @@ public class PlayerNetwork : NetworkBehaviour
     // Attempt to pick up an orange
     public void TryPickupOrange()
     {
+        Debug.Log("Attempting to pick up an orange.");
         if (heldOrange != null)
         {
             Debug.Log("Already holding an orange.");
-            return;
+            return;  // Exit if already holding an orange
         }
 
         Collider2D[] hitColliders = Physics2D.OverlapCircleAll(transform.position, 1f);
@@ -298,6 +317,7 @@ public class PlayerNetwork : NetworkBehaviour
             {
                 Debug.Log($"Trying to pick up orange with ID: {hit.GetComponent<NetworkObject>().NetworkObjectId}");
                 RequestPickupOrangeServerRpc(hit.GetComponent<NetworkObject>().NetworkObjectId);
+                break;
             }
         }
     }
@@ -307,13 +327,14 @@ public class PlayerNetwork : NetworkBehaviour
     {
         if (heldOrange != null && IsOwner)
         {
+            Debug.Log("Checking for basket collision to drop orange.");
             Collider2D[] hitColliders = Physics2D.OverlapCircleAll(transform.position, 0.5f);
             foreach (Collider2D hit in hitColliders)
             {
                 if (hit.CompareTag("Basket"))
                 {
-                    Debug.Log("Dropping orange into basket.");
                     RequestDropOrangeServerRpc(heldOrange.GetComponent<NetworkObject>().NetworkObjectId);
+                    break;
                 }
             }
         }
