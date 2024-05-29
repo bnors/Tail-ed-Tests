@@ -342,6 +342,8 @@ public class PlayerNetwork : NetworkBehaviour
         // Get the player object using client ID and update the score
         var playerNetwork = NetworkManager.Singleton.ConnectedClients[clientId].PlayerObject.GetComponent<PlayerNetwork>();
         playerNetwork.individualScore.Value += points;
+        Debug.Log($"Score added. New score for client {clientId}: {playerNetwork.individualScore.Value}");
+
 
         // Check and update the highest score if necessary
         if (playerNetwork.individualScore.Value > highestScore.Value)

@@ -63,6 +63,7 @@ public class OrangeSpawner : NetworkBehaviour
     public void OrangePickedUp()
     {
         Debug.Log("Orange picked up, scheduling new spawn.");
-        StartCoroutine(SpawnNewOrangeAfterDelay(5f));
+        canSpawn = true;  // Ensure this is set so new oranges can spawn.
+        StartCoroutine(SpawnNewOrangeAfterDelay(5f));  // Make sure this coroutine waits for 5 seconds before setting canSpawn to true.
     }
 }
