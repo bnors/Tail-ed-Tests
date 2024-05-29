@@ -189,10 +189,10 @@ public class PlayerNetwork : NetworkBehaviour
     }
 
     [ClientRpc]
-    void UpdateScoreTextsClientRpc(int newIndividualScore, int newHighestScore, ulong newHighestScoreClientId)
+    void UpdateScoreTextsClientRpc(ulong clientId, int newIndividualScore, int newHighestScore, ulong newHighestScoreClientId)
     {
-        Debug.Log($"Client: Received score update. New Individual Score: {newIndividualScore}, New Highest Score: {newHighestScore}");
-        if (individualScoreText != null)
+        Debug.Log($"SERVER {clientId} CLIENT {this.clientId.Value} Client: Received score update. New Individual Score: {newIndividualScore}, New Highest Score: {newHighestScore}");
+        if (individualScoreText != null && IsClient && IsOwner)
             individualScoreText.text = $"Score: {newIndividualScore}";
         if (highestScoreText != null)
             highestScoreText.text = $"Highest Score: {newHighestScore} (Client {newHighestScoreClientId})";
@@ -332,7 +332,7 @@ public class PlayerNetwork : NetworkBehaviour
             Debug.Log("Server: New highest score updated.");
         }
 
-        //UpdateScoreTextsClientRpc(playerNetwork.individualScore.Value, highestScore.Value, highestScoreClientId.Value);
+        UpdateScoreTextsClientRpc(clientId, playerNetwork.individualScore.Value, highestScore.Value, highestScoreClientId.Value);
     }
 
     void OnEnable()
@@ -342,7 +342,7 @@ public class PlayerNetwork : NetworkBehaviour
             NetworkManager.Singleton.OnClientConnectedCallback += HandleClientConnected;
         }
 
-        individualScore.OnValueChanged += OnIndividualScoreChanged;
+        //individualScore.OnValueChanged += OnIndividualScoreChanged;
         highestScore.OnValueChanged += OnHighestScoreChanged;
         highestScoreClientId.OnValueChanged += OnHighestScoreClientIdChanged;
     }
@@ -353,7 +353,7 @@ public class PlayerNetwork : NetworkBehaviour
         {
             NetworkManager.Singleton.OnClientConnectedCallback -= HandleClientConnected;
         }
-        individualScore.OnValueChanged -= OnIndividualScoreChanged;
+        //individualScore.OnValueChanged -= OnIndividualScoreChanged;
         highestScore.OnValueChanged -= OnHighestScoreChanged;
         highestScoreClientId.OnValueChanged -= OnHighestScoreClientIdChanged;
     }
@@ -375,6 +375,7 @@ public class PlayerNetwork : NetworkBehaviour
 
     void OnIndividualScoreChanged(int oldScore, int newScore)
     {
+        Debug.Log($"OnIndividualScoreChanged : {clientId.Value}, {oldScore}, {newScore}");
         UpdateIndividualScoreText();
     }
 
