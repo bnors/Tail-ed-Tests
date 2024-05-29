@@ -208,6 +208,7 @@ public class PlayerNetwork : NetworkBehaviour
     [ClientRpc]
     void UpdateScoreTextsClientRpc(int newIndividualScore, int newHighestScore, ulong newHighestScoreClientId)
     {
+        Debug.Log($"Client: Received score update. New Individual Score: {newIndividualScore}, New Highest Score: {newHighestScore}");
         if (individualScoreText != null)
             individualScoreText.text = $"Score: {newIndividualScore}";
         if (highestScoreText != null)
@@ -293,6 +294,7 @@ public class PlayerNetwork : NetworkBehaviour
     // Attempt to pick up an orange
     public void TryPickupOrange()
     {
+        Debug.Log("Attempting to pick up an orange.");
         if (heldOrange != null)
         {
             Debug.Log("Already holding an orange.");
@@ -322,12 +324,10 @@ public class PlayerNetwork : NetworkBehaviour
             {
                 if (hit.CompareTag("Basket"))
                 {
-                    Debug.Log("Basket detected, attempting to drop orange.");
-                    // Tell the server to process the orange dropping
                     RequestDropOrangeServerRpc(heldOrange.GetComponent<NetworkObject>().NetworkObjectId);
-                    // Immediately remove the orange from the player to prevent duplicate drops
-                    heldOrange.SetActive(false);
-                    heldOrange = null;
+                    // Call AddScore with correct clientId
+                    AddScore(5, NetworkManager.Singleton.LocalClientId);
+                    FindObjectOfType<OrangeSpawner>().OrangePickedUp(); // Ensure this is called
                     break;
                 }
             }
