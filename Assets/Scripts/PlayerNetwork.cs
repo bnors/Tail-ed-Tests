@@ -218,50 +218,50 @@ public class PlayerNetwork : NetworkBehaviour
     [ServerRpc(RequireOwnership = false)]
     void RequestPickupOrangeServerRpc(ulong orangeNetworkObjectId, ServerRpcParams rpcParams = default)
     {
+        Debug.Log($"Server: Received pickup request for orange {orangeNetworkObjectId} from client {rpcParams.Receive.SenderClientId}");
         if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(orangeNetworkObjectId, out NetworkObject orangeNetworkObject))
         {
-            Debug.Log($"Server: Received pickup request for orange {orangeNetworkObjectId} from client {rpcParams.Receive.SenderClientId}");
-            if (orangeNetworkObject.IsSpawned && orangeNetworkObject.OwnerClientId == 0)  // If not owned
+            Debug.Log($"Server: Found orange in SpawnManager. Current owner: {orangeNetworkObject.OwnerClientId}");
+            if (orangeNetworkObject.IsSpawned && orangeNetworkObject.OwnerClientId == 0)
             {
                 orangeNetworkObject.ChangeOwnership(rpcParams.Receive.SenderClientId);
-                var clientPlayer = NetworkManager.Singleton.ConnectedClients[rpcParams.Receive.SenderClientId].PlayerObject;
-                Vector3 playerPosition = clientPlayer.transform.position;
                 Debug.Log($"Server: Changing ownership of orange {orangeNetworkObjectId} and sending update to clients.");
-                UpdateOrangeStateClientRpc(true, orangeNetworkObjectId, playerPosition, rpcParams.Receive.SenderClientId);
+                UpdateOrangeStateClientRpc(true, orangeNetworkObjectId, rpcParams.Receive.SenderClientId);
             }
+            else
+            {
+                Debug.Log("Server: Orange is already owned or not spawned.");
+            }
+        }
+        else
+        {
+            Debug.LogError("Server: Orange not found in SpawnManager.");
         }
     }
 
     // Client RPC to handle updates on orange state
     [ClientRpc]
-    void UpdateOrangeStateClientRpc(bool pickedUp, ulong orangeNetworkObjectId, Vector3 newPosition, ulong clientId)
+    void UpdateOrangeStateClientRpc(bool pickedUp, ulong orangeNetworkObjectId, ulong clientId)
     {
         Debug.Log($"Client: Received update to change orange state {pickedUp} for orange {orangeNetworkObjectId}");
         var orangeNetworkObject = NetworkManager.Singleton.SpawnManager.SpawnedObjects[orangeNetworkObjectId];
         if (orangeNetworkObject != null)
         {
             GameObject orange = orangeNetworkObject.gameObject;
-
-            if (pickedUp)
+            Debug.Log($"Client: Processing state change for orange {orangeNetworkObjectId}. Picked up: {pickedUp}");
+            if (pickedUp && NetworkManager.Singleton.LocalClientId == clientId)
             {
-                Debug.Log($"Client: Moving orange to new position at {newPosition}");
-                // Directly setting position for debugging
-                orange.transform.position = newPosition;
-                // If this is the owner client, track the orange
-                if (NetworkManager.Singleton.LocalClientId == clientId)
-                {
-                    heldOrange = orange;
-                }
+                Debug.Log($"Client: Assigning picked up orange to local player.");
+                orange.transform.SetParent(FindObjectOfType<PlayerNetwork>().transform);
+                orange.transform.localPosition = Vector3.zero;
+                heldOrange = orange;
             }
             else
             {
-                Debug.Log("Client: Resetting orange position and deactivating.");
-                orange.transform.position = newPosition;  // You could adjust this to a drop-off point
+                Debug.Log("Client: Resetting orange position and visibility.");
+                orange.transform.SetParent(null);
                 orange.SetActive(false);
-                if (heldOrange == orange)
-                {
-                    heldOrange = null;
-                }
+                heldOrange = null;
             }
         }
         else
@@ -274,18 +274,18 @@ public class PlayerNetwork : NetworkBehaviour
     [ServerRpc(RequireOwnership = true)]
     void RequestDropOrangeServerRpc(ulong orangeNetworkObjectId)
     {
+        Debug.Log($"Server: Received drop request for orange {orangeNetworkObjectId}");
         if (NetworkManager.Singleton.SpawnManager.SpawnedObjects.TryGetValue(orangeNetworkObjectId, out NetworkObject orangeNetworkObject))
         {
             if (orangeNetworkObject.OwnerClientId == NetworkManager.Singleton.LocalClientId)
             {
-                // Despawn the orange
+                Debug.Log("Server: Despawning orange and updating score.");
                 orangeNetworkObject.Despawn();
-
-                // Update the score for the client who dropped the orange
                 AddScore(5, NetworkManager.Singleton.LocalClientId);
-
-                // Log the despawning for debugging
-                Debug.Log($"Orange {orangeNetworkObjectId} despawned by client {NetworkManager.Singleton.LocalClientId}");
+            }
+            else
+            {
+                Debug.LogError("Server: Owner mismatch or orange not found.");
             }
         }
     }
@@ -337,22 +337,20 @@ public class PlayerNetwork : NetworkBehaviour
     // Update the score for a specific client
     public void AddScore(int points, ulong clientId)
     {
-        if (!IsServer) return; // Ensure this only runs on the server
+        Debug.Log($"Server: Adding score {points} to client {clientId}");
+        if (!IsServer) return;
 
-        // Get the player object using client ID and update the score
         var playerNetwork = NetworkManager.Singleton.ConnectedClients[clientId].PlayerObject.GetComponent<PlayerNetwork>();
         playerNetwork.individualScore.Value += points;
-        Debug.Log($"Score added. New score for client {clientId}: {playerNetwork.individualScore.Value}");
+        Debug.Log($"Server: New score for client {clientId} is {playerNetwork.individualScore.Value}");
 
-
-        // Check and update the highest score if necessary
         if (playerNetwork.individualScore.Value > highestScore.Value)
         {
             highestScore.Value = playerNetwork.individualScore.Value;
             highestScoreClientId.Value = clientId;
+            Debug.Log("Server: New highest score updated.");
         }
 
-        // Notify all clients about the score update
         UpdateScoreTextsClientRpc(playerNetwork.individualScore.Value, highestScore.Value, highestScoreClientId.Value);
     }
 
