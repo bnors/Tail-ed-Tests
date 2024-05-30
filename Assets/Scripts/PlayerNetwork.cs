@@ -84,7 +84,7 @@ public class PlayerNetwork : NetworkBehaviour
     }
 
     // Cleanup event handlers on destruction
-    private void OnDestroy()
+    public override void OnDestroy()
     {
         if (NetworkManager.Singleton)
         {
@@ -311,20 +311,6 @@ public class PlayerNetwork : NetworkBehaviour
             }
         }
     }
-
-    // Handles collisions with the basket to process score updates and orange drops
-    //void OnTriggerEnter2D(Collider2D collision)
-    //{
-      //  if (collision.CompareTag("Basket") && heldOrange != null)
-    //    {
-    //        if (IsOwner)  // Ensure only the owner can score
-    //        {
-    //            ulong ownerId = heldOrange.GetComponent<NetworkObject>().OwnerClientId;
-    //            AddScore(5, ownerId);  // Add score to the client who owns the orange
-     //           RequestDropOrangeServerRpc(heldOrange.GetComponent<NetworkObject>().NetworkObjectId);
-     //       }
-     //   }
-   // }
 
     // Updates the score for a specific client
     public void AddScore(int points, ulong clientId)
