@@ -7,13 +7,14 @@ using TMPro;
 using static Unity.Burst.Intrinsics.X86.Avx;
 
 // Defines the player's network behavior and interactions within a multiplayer setting.
+
 public class PlayerNetwork : NetworkBehaviour
 {
     // Player movement variables
-    private Vector2 moveDir;
-    private float moveSpeed = 3f;
-    private Animator animator;
-    private SpriteRenderer spriteRenderer;
+    private Vector2 moveDir; // Direction of player movement
+    private float moveSpeed = 3f; // Speed of player movement
+    private Animator animator; // Reference to the Animator component
+    private SpriteRenderer spriteRenderer; // Reference to the SpriteRenderer component
     private GameObject heldOrange;  // Reference to the orange game object this player might be holding
 
     // Network variables to synchronize across clients and server
@@ -55,6 +56,7 @@ public class PlayerNetwork : NetworkBehaviour
 
     private void Update()
     {
+        // Only handle input and movement if this is a client, not a host, and the owner of the object
         if (IsClient && !IsHost && IsOwner)
         {
             HandleInput();
@@ -81,6 +83,7 @@ public class PlayerNetwork : NetworkBehaviour
         }
     }
 
+    // Cleanup event handlers on destruction
     private void OnDestroy()
     {
         if (NetworkManager.Singleton)
@@ -89,6 +92,7 @@ public class PlayerNetwork : NetworkBehaviour
         }
     }
 
+    // Assigns a unique client ID to each connected client
     private void AssignClientID(ulong newClientID)
     {
         if (IsServer)
@@ -99,11 +103,13 @@ public class PlayerNetwork : NetworkBehaviour
         }
     }
 
+    // Handles changes in the client ID
     private void HandleClientIDChanged(ulong previousValue, ulong newValue)
     {
         UpdateClientIDText();
     }
 
+    // Handles player input for movement
     void HandleInput()
     {
         Vector2 previousMoveDir = moveDir;
@@ -117,6 +123,7 @@ public class PlayerNetwork : NetworkBehaviour
         }
     }
 
+    // Moves the player based on input
     void MovePlayer()
     {
         transform.position += (Vector3)moveDir * moveSpeed * Time.deltaTime;
@@ -126,6 +133,7 @@ public class PlayerNetwork : NetworkBehaviour
         }
     }
 
+    // RPC sent from the client to the server to request an update to the movement state
     [ServerRpc]
     void RequestUpdateServerRpc(bool running, Vector2 moveDirection)
     {
@@ -133,6 +141,7 @@ public class PlayerNetwork : NetworkBehaviour
         UpdateAnimationStateClientRpc(running, moveDirection);
     }
 
+    // RPC sent from the server to all clients to update the animation state
     [ClientRpc]
     void UpdateAnimationStateClientRpc(bool running, Vector2 moveDirection)
     {
@@ -140,19 +149,22 @@ public class PlayerNetwork : NetworkBehaviour
         HandleAnimation(running, moveDirection);
     }
 
+    // Updates the movement state on the server
     void UpdateMovementState(bool running, Vector2 moveDirection)
     {
         isRunning.Value = running;
         networkMoveDir.Value = moveDirection;
     }
 
-    [ServerRpc(RequireOwnership = false)]
-    void RequestUpdateClientIDServerRpc(ulong clientID, ServerRpcParams rpcParams = default)
-    {
-        clientId.Value = clientID;
-        UpdateClientIDTextClientRpc(clientID);
-    }
+    // RPC sent from the client to the server to request an update to the client ID
+    //[ServerRpc(RequireOwnership = false)]
+   // void RequestUpdateClientIDServerRpc(ulong clientID, ServerRpcParams rpcParams = default)
+    //{
+    //    clientId.Value = clientID;
+    //    UpdateClientIDTextClientRpc(clientID);
+   // }
 
+    // RPC sent from the server to all clients to update the client ID text
     [ClientRpc]
     void UpdateClientIDTextClientRpc(ulong id)
     {
@@ -160,6 +172,7 @@ public class PlayerNetwork : NetworkBehaviour
             clientIDText.text = $"Client {id}";
     }
 
+    // Handles animation state changes
     void HandleAnimation(bool isRunning, Vector2 moveDir)
     {
         // Update the animator with the running state
@@ -168,6 +181,7 @@ public class PlayerNetwork : NetworkBehaviour
         spriteRenderer.flipX = moveDir.x < 0;
     }
 
+    // Updates the client ID text
     private void UpdateClientIDText()
     {
         if (clientIDText != null)
@@ -176,18 +190,21 @@ public class PlayerNetwork : NetworkBehaviour
         }
     }
 
+    // Updates the individual score text
     void UpdateIndividualScoreText()
     {
         if (individualScoreText != null)
             individualScoreText.text = $"Score: {individualScore.Value}";
     }
 
+    // Updates the highest score text
     void UpdateHighestScoreText()
     {
         if (highestScoreText != null)
             highestScoreText.text = $"Highest Score: {highestScore.Value} (Client {highestScoreClientId.Value})";
     }
 
+    // RPC sent from the server to all clients to update the score texts
     [ClientRpc]
     void UpdateScoreTextsClientRpc(ulong clientId, int newIndividualScore, int newHighestScore, ulong newHighestScoreClientId)
     {
@@ -198,6 +215,7 @@ public class PlayerNetwork : NetworkBehaviour
             highestScoreText.text = $"Highest Score: {newHighestScore} (Client {newHighestScoreClientId})";
     }
 
+    // RPC sent from the client to the server to request picking up an orange
     [ServerRpc(RequireOwnership = false)]
     void RequestPickupOrangeServerRpc(ulong orangeNetworkObjectId, ServerRpcParams rpcParams = default)
     {
@@ -222,6 +240,7 @@ public class PlayerNetwork : NetworkBehaviour
         }
     }
 
+    // RPC sent from the server to all clients to update the orange state
     [ClientRpc]
     void UpdateOrangeStateClientRpc(bool pickedUp, ulong orangeNetworkObjectId, ulong clientId)
     {
@@ -255,6 +274,7 @@ public class PlayerNetwork : NetworkBehaviour
         }
     }
 
+    // RPC sent from the client to the server to request dropping an orange
     [ServerRpc(RequireOwnership = true)]
     void RequestDropOrangeServerRpc(ulong orangeNetworkObjectId, ServerRpcParams rpcParams = default)
     {
@@ -275,6 +295,7 @@ public class PlayerNetwork : NetworkBehaviour
         }
     }
 
+    // Attempts to pick up an orange
     public void TryPickupOrange()
     {
         Debug.Log("Attempting to pick up an orange.");
@@ -296,6 +317,7 @@ public class PlayerNetwork : NetworkBehaviour
         }
     }
 
+    // Attempts to drop an orange
     void TryDropOrange()
     {
         if (heldOrange != null && IsOwner)
@@ -314,14 +336,13 @@ public class PlayerNetwork : NetworkBehaviour
         }
     }
 
+    // Updates the score for a specific client
     public void AddScore(int points, ulong clientId)
     {
         Debug.Log($"Server: Adding score {points} to client {clientId} {this.clientId} ");
         if (!IsServer) return;
 
-
         var playerNetwork = NetworkManager.Singleton.ConnectedClients[clientId].PlayerObject.GetComponent<PlayerNetwork>();
-        //playerNetwork.individualScore.Value += points;
         individualScore.Value += points;
         Debug.Log($"Server: New score for client {clientId} is {playerNetwork.individualScore.Value}");
 
@@ -335,6 +356,7 @@ public class PlayerNetwork : NetworkBehaviour
         UpdateScoreTextsClientRpc(clientId, playerNetwork.individualScore.Value, highestScore.Value, highestScoreClientId.Value);
     }
 
+    // Handles network events when enabled
     void OnEnable()
     {
         if (IsServer)
@@ -342,22 +364,22 @@ public class PlayerNetwork : NetworkBehaviour
             NetworkManager.Singleton.OnClientConnectedCallback += HandleClientConnected;
         }
 
-        //individualScore.OnValueChanged += OnIndividualScoreChanged;
         highestScore.OnValueChanged += OnHighestScoreChanged;
         highestScoreClientId.OnValueChanged += OnHighestScoreClientIdChanged;
     }
 
+    // Cleans up network events when disabled
     void OnDisable()
     {
         if (NetworkManager.Singleton != null)
         {
             NetworkManager.Singleton.OnClientConnectedCallback -= HandleClientConnected;
         }
-        //individualScore.OnValueChanged -= OnIndividualScoreChanged;
         highestScore.OnValueChanged -= OnHighestScoreChanged;
         highestScoreClientId.OnValueChanged -= OnHighestScoreClientIdChanged;
     }
 
+    // Handles new client connections by assigning client IDs
     private void HandleClientConnected(ulong newClientId)
     {
         if (IsServer)
@@ -366,6 +388,7 @@ public class PlayerNetwork : NetworkBehaviour
         }
     }
 
+    // Client RPC to update client ID information
     [ClientRpc]
     private void UpdateClientIDClientRpc(ulong newClientId)
     {
@@ -373,22 +396,26 @@ public class PlayerNetwork : NetworkBehaviour
         UpdateClientIDText();
     }
 
-    void OnIndividualScoreChanged(int oldScore, int newScore)
-    {
-        Debug.Log($"OnIndividualScoreChanged : {clientId.Value}, {oldScore}, {newScore}");
-        UpdateIndividualScoreText();
-    }
+    // Updates the individual score text when the score changes
+    //void OnIndividualScoreChanged(int oldScore, int newScore)
+    //{
+     //   Debug.Log($"OnIndividualScoreChanged : {clientId.Value}, {oldScore}, {newScore}");
+     //   UpdateIndividualScoreText();
+    //}
 
+    // Updates the highest score text when the highest score changes
     void OnHighestScoreChanged(int oldScore, int newScore)
     {
         UpdateHighestScoreText();
     }
 
+    // Updates the highest score client ID text when it changes
     void OnHighestScoreClientIdChanged(ulong oldClientId, ulong newClientId)
     {
         UpdateHighestScoreText();
     }
 
+    // Handles collisions with the basket to process score updates and orange drops
     void OnTriggerEnter2D(Collider2D collision)
     {
         if (collision.CompareTag("Basket") && heldOrange != null)
