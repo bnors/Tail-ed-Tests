@@ -29,6 +29,7 @@ public class PlayerNetwork : NetworkBehaviour
     private TextMeshProUGUI clientIDText;
     private TextMeshProUGUI individualScoreText;
     private TextMeshProUGUI highestScoreText;
+    private Camera playerCamera;
 
     private void Start()
     {
@@ -52,6 +53,12 @@ public class PlayerNetwork : NetworkBehaviour
         UpdateClientIDText();
         UpdateIndividualScoreText();
         UpdateHighestScoreText();
+
+        // Setup the camera for the local player
+        if (IsOwner)
+        {
+            SetupCamera();
+        }
     }
 
     private void Update()
@@ -89,6 +96,22 @@ public class PlayerNetwork : NetworkBehaviour
         if (NetworkManager.Singleton)
         {
             NetworkManager.Singleton.OnClientConnectedCallback -= AssignClientID;
+        }
+    }
+
+    private void SetupCamera()
+    {
+        playerCamera = Camera.main;
+
+        if (playerCamera != null)
+        {
+            var cameraFollow = playerCamera.GetComponent<CameraFollow>();
+            if (cameraFollow == null)
+            {
+                cameraFollow = playerCamera.gameObject.AddComponent<CameraFollow>();
+            }
+            cameraFollow.target = transform;
+            cameraFollow.offset = new Vector3(0, 0, -10);
         }
     }
 
