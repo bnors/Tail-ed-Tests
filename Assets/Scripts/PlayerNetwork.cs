@@ -92,6 +92,15 @@ public class PlayerNetwork : NetworkBehaviour
         }
     }
 
+    // Handles new client connections by assigning client IDs
+    private void HandleClientConnected(ulong newClientId)
+    {
+        if (IsServer)
+        {
+            UpdateClientIDClientRpc(newClientId);
+        }
+    }
+
     // Assigns a unique client ID to each connected client
     private void AssignClientID(ulong newClientID)
     {
@@ -106,6 +115,23 @@ public class PlayerNetwork : NetworkBehaviour
     // Handles changes in the client ID
     private void HandleClientIDChanged(ulong previousValue, ulong newValue)
     {
+        UpdateClientIDText();
+    }
+
+    // Updates the client ID text
+    private void UpdateClientIDText()
+    {
+        if (clientIDText != null)
+        {
+            clientIDText.text = $"Client {clientId.Value}";
+        }
+    }
+
+    // Client RPC to update client ID information
+    [ClientRpc]
+    private void UpdateClientIDClientRpc(ulong newClientId)
+    {
+        clientId.Value = newClientId;
         UpdateClientIDText();
     }
 
@@ -156,22 +182,6 @@ public class PlayerNetwork : NetworkBehaviour
         networkMoveDir.Value = moveDirection;
     }
 
-    // RPC sent from the client to the server to request an update to the client ID
-    //[ServerRpc(RequireOwnership = false)]
-   // void RequestUpdateClientIDServerRpc(ulong clientID, ServerRpcParams rpcParams = default)
-    //{
-    //    clientId.Value = clientID;
-    //    UpdateClientIDTextClientRpc(clientID);
-   // }
-
-    // RPC sent from the server to all clients to update the client ID text
-    [ClientRpc]
-    void UpdateClientIDTextClientRpc(ulong id)
-    {
-        if (clientIDText != null)
-            clientIDText.text = $"Client {id}";
-    }
-
     // Handles animation state changes
     void HandleAnimation(bool isRunning, Vector2 moveDir)
     {
@@ -179,40 +189,6 @@ public class PlayerNetwork : NetworkBehaviour
         animator.SetBool("isRunning", isRunning);
         // Determine the sprite flip based on the x component of the move direction
         spriteRenderer.flipX = moveDir.x < 0;
-    }
-
-    // Updates the client ID text
-    private void UpdateClientIDText()
-    {
-        if (clientIDText != null)
-        {
-            clientIDText.text = $"Client {clientId.Value}";
-        }
-    }
-
-    // Updates the individual score text
-    void UpdateIndividualScoreText()
-    {
-        if (individualScoreText != null)
-            individualScoreText.text = $"Score: {individualScore.Value}";
-    }
-
-    // Updates the highest score text
-    void UpdateHighestScoreText()
-    {
-        if (highestScoreText != null)
-            highestScoreText.text = $"Highest Score: {highestScore.Value} (Client {highestScoreClientId.Value})";
-    }
-
-    // RPC sent from the server to all clients to update the score texts
-    [ClientRpc]
-    void UpdateScoreTextsClientRpc(ulong clientId, int newIndividualScore, int newHighestScore, ulong newHighestScoreClientId)
-    {
-        Debug.Log($"SERVER {clientId} CLIENT {this.clientId.Value} Client: Received score update. New Individual Score: {newIndividualScore}, New Highest Score: {newHighestScore}");
-        if (individualScoreText != null && IsClient && IsOwner)
-            individualScoreText.text = $"Score: {newIndividualScore}";
-        if (highestScoreText != null)
-            highestScoreText.text = $"Highest Score: {newHighestScore} (Client {newHighestScoreClientId})";
     }
 
     // RPC sent from the client to the server to request picking up an orange
@@ -237,6 +213,28 @@ public class PlayerNetwork : NetworkBehaviour
         else
         {
             Debug.LogError("Server: Orange not found in SpawnManager.");
+        }
+    }
+
+    // Attempts to pick up an orange
+    public void TryPickupOrange()
+    {
+        Debug.Log("Attempting to pick up an orange.");
+        if (heldOrange != null)
+        {
+            Debug.Log("Already holding an orange.");
+            return;  // Exit if already holding an orange
+        }
+
+        Collider2D[] hitColliders = Physics2D.OverlapCircleAll(transform.position, 1f);
+        foreach (Collider2D hit in hitColliders)
+        {
+            if (hit.CompareTag("Orange"))
+            {
+                Debug.Log($"Trying to pick up orange with ID: {hit.GetComponent<NetworkObject>().NetworkObjectId}");
+                RequestPickupOrangeServerRpc(hit.GetComponent<NetworkObject>().NetworkObjectId);
+                break;
+            }
         }
     }
 
@@ -295,28 +293,6 @@ public class PlayerNetwork : NetworkBehaviour
         }
     }
 
-    // Attempts to pick up an orange
-    public void TryPickupOrange()
-    {
-        Debug.Log("Attempting to pick up an orange.");
-        if (heldOrange != null)
-        {
-            Debug.Log("Already holding an orange.");
-            return;  // Exit if already holding an orange
-        }
-
-        Collider2D[] hitColliders = Physics2D.OverlapCircleAll(transform.position, 1f);
-        foreach (Collider2D hit in hitColliders)
-        {
-            if (hit.CompareTag("Orange"))
-            {
-                Debug.Log($"Trying to pick up orange with ID: {hit.GetComponent<NetworkObject>().NetworkObjectId}");
-                RequestPickupOrangeServerRpc(hit.GetComponent<NetworkObject>().NetworkObjectId);
-                break;
-            }
-        }
-    }
-
     // Attempts to drop an orange
     void TryDropOrange()
     {
@@ -336,6 +312,20 @@ public class PlayerNetwork : NetworkBehaviour
         }
     }
 
+    // Handles collisions with the basket to process score updates and orange drops
+    //void OnTriggerEnter2D(Collider2D collision)
+    //{
+      //  if (collision.CompareTag("Basket") && heldOrange != null)
+    //    {
+    //        if (IsOwner)  // Ensure only the owner can score
+    //        {
+    //            ulong ownerId = heldOrange.GetComponent<NetworkObject>().OwnerClientId;
+    //            AddScore(5, ownerId);  // Add score to the client who owns the orange
+     //           RequestDropOrangeServerRpc(heldOrange.GetComponent<NetworkObject>().NetworkObjectId);
+     //       }
+     //   }
+   // }
+
     // Updates the score for a specific client
     public void AddScore(int points, ulong clientId)
     {
@@ -354,6 +344,43 @@ public class PlayerNetwork : NetworkBehaviour
         }
 
         UpdateScoreTextsClientRpc(clientId, playerNetwork.individualScore.Value, highestScore.Value, highestScoreClientId.Value);
+    }
+
+    // RPC sent from the server to all clients to update the score texts
+    [ClientRpc]
+    void UpdateScoreTextsClientRpc(ulong clientId, int newIndividualScore, int newHighestScore, ulong newHighestScoreClientId)
+    {
+        Debug.Log($"SERVER {clientId} CLIENT {this.clientId.Value} Client: Received score update. New Individual Score: {newIndividualScore}, New Highest Score: {newHighestScore}");
+        if (individualScoreText != null && IsClient && IsOwner)
+            individualScoreText.text = $"Score: {newIndividualScore}";
+        if (highestScoreText != null)
+            highestScoreText.text = $"Highest Score: {newHighestScore} (Client {newHighestScoreClientId})";
+    }
+
+    // Updates the individual score text
+    void UpdateIndividualScoreText()
+    {
+        if (individualScoreText != null)
+            individualScoreText.text = $"Score: {individualScore.Value}";
+    }
+
+    // Updates the highest score text
+    void UpdateHighestScoreText()
+    {
+        if (highestScoreText != null)
+            highestScoreText.text = $"Highest Score: {highestScore.Value} (Client {highestScoreClientId.Value})";
+    }
+
+    // Updates the highest score text when the highest score changes
+    void OnHighestScoreChanged(int oldScore, int newScore)
+    {
+        UpdateHighestScoreText();
+    }
+
+    // Updates the highest score client ID text when it changes
+    void OnHighestScoreClientIdChanged(ulong oldClientId, ulong newClientId)
+    {
+        UpdateHighestScoreText();
     }
 
     // Handles network events when enabled
@@ -377,55 +404,5 @@ public class PlayerNetwork : NetworkBehaviour
         }
         highestScore.OnValueChanged -= OnHighestScoreChanged;
         highestScoreClientId.OnValueChanged -= OnHighestScoreClientIdChanged;
-    }
-
-    // Handles new client connections by assigning client IDs
-    private void HandleClientConnected(ulong newClientId)
-    {
-        if (IsServer)
-        {
-            UpdateClientIDClientRpc(newClientId);
-        }
-    }
-
-    // Client RPC to update client ID information
-    [ClientRpc]
-    private void UpdateClientIDClientRpc(ulong newClientId)
-    {
-        clientId.Value = newClientId;
-        UpdateClientIDText();
-    }
-
-    // Updates the individual score text when the score changes
-    //void OnIndividualScoreChanged(int oldScore, int newScore)
-    //{
-     //   Debug.Log($"OnIndividualScoreChanged : {clientId.Value}, {oldScore}, {newScore}");
-     //   UpdateIndividualScoreText();
-    //}
-
-    // Updates the highest score text when the highest score changes
-    void OnHighestScoreChanged(int oldScore, int newScore)
-    {
-        UpdateHighestScoreText();
-    }
-
-    // Updates the highest score client ID text when it changes
-    void OnHighestScoreClientIdChanged(ulong oldClientId, ulong newClientId)
-    {
-        UpdateHighestScoreText();
-    }
-
-    // Handles collisions with the basket to process score updates and orange drops
-    void OnTriggerEnter2D(Collider2D collision)
-    {
-        if (collision.CompareTag("Basket") && heldOrange != null)
-        {
-            if (IsOwner)  // Ensure only the owner can score
-            {
-                ulong ownerId = heldOrange.GetComponent<NetworkObject>().OwnerClientId;
-                AddScore(5, ownerId);  // Add score to the client who owns the orange
-                RequestDropOrangeServerRpc(heldOrange.GetComponent<NetworkObject>().NetworkObjectId);
-            }
-        }
     }
 }
